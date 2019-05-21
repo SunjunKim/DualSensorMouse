@@ -113,15 +113,17 @@ void loop() {
     //data.dx = data1.dx + data2.dx;
     //data.dy = data1.dy + data2.dy;
 
+    bool moved = data.dx != 0 || data.dy != 0;
+
 #ifdef ADVANCE_MODE
-    if (AdvMouse.needSendReport() || (data.isOnSurface && data.isMotion))
+    if (AdvMouse.needSendReport() || (data.isOnSurface && moved))
     {
-      if (AdvMouse.needSendReport() && !data.isMotion)
-        Serial.println("Btn report");
+      //if (AdvMouse.needSendReport() && !data.isMotion)
+      //  Serial.println("Btn report");
       AdvMouse.move(data.dx, data.dy, 0);
     }
 #else
-    if (data.isOnSurface && data.isMotion)
+    if (data.isOnSurface && moved)
     {
       signed char mdx = constrain(data.dx, -127, 127);
       signed char mdy = constrain(data.dy, -127, 127);
@@ -129,8 +131,7 @@ void loop() {
       Mouse.move(mdx, mdy, 0);
     }
 #endif
-
-
+  
     if (reportSQ && data.isOnSurface) // print surface quality
     {
       Serial.println(data.SQUAL);
