@@ -19,14 +19,16 @@
 #define MOUSE_RELEASE(x)  Mouse.release(x)
 #endif
 
-
 // User define values
-#define SS1  9          // Slave Select pin. Clogitonnect this to SS on the module.
-#define SS2  10          // Slave Select pin. Connect this to SS on the module.
+#define DEFAULT_CPI  1200
+#define SENSOR_DISTANCE 72  // in mm
+
+#define SS1  9          // Slave Select pin. Connect this to SS on the module. (Front sensor)
+#define SS2  10          // Slave Select pin. Connect this to SS on the module. (Rear sensor)
 #define NUMBTN 2        // number of buttons attached
 #define BTN1 2          // left button pin
 #define BTN2 3          // right button pin
-#define DEBOUNCE  25    // debounce itme in ms. Minimun time required for a button to be stabilized.
+#define DEBOUNCE  15    // debounce itme in ms. Minimun time required for a button to be stabilized.
 
 int btn_pins[NUMBTN] = { BTN1, BTN2 };
 char btn_keys[NUMBTN] = { MOUSE_LEFT, MOUSE_RIGHT };
@@ -39,18 +41,20 @@ int posRatio = 55;      // located at 55% (centerd but slightly at the front sid
 bool btn_state[NUMBTN] = { false, false };
 uint8_t btn_buffers[NUMBTN] = {0xFF, 0xFF};
 
+// internal variables
 unsigned long lastTS;
 unsigned long lastButtonCheck = 0;
 
 int remain_dx, remain_dy;
 
-
-
 bool reportSQ = false;  // report surface quality
+
+float sensor_dist_inch = (float)SENSOR_DISTANCE / 25.4;
+int current_cpi = DEFAULT_CPI;
 
 void setup() {
   Serial.begin(9600);
-  //while(!Serial);
+  while(!Serial);
   //sensor.begin(10, 1600); // to set CPI (Count per Inch), pass it as the second parameter
 
   sensor1.begin(SS1); sensor2.begin(SS2);
@@ -66,8 +70,8 @@ void setup() {
   else
     Serial.println("Sensor2 initialization failed");
 
-  sensor1.setCPI(1200);    // or, you can set CPI later by calling setCPI();
-  sensor2.setCPI(1200);    // or, you can set CPI later by calling setCPI();
+  sensor1.setCPI(DEFAULT_CPI);    // or, you can set CPI later by calling setCPI();
+  sensor2.setCPI(DEFAULT_CPI);    // or, you can set CPI later by calling setCPI();
 
   sensor1.writeReg(REG_Control, 0b11000000); // turn 90 deg configuration
   sensor2.writeReg(REG_Control, 0b11000000);
@@ -115,6 +119,19 @@ void loop() {
 
     bool moved = data.dx != 0 || data.dy != 0;
 
+    /*
+    if(data.isOnSurface)
+    {
+      Serial.print(data1.dx);
+      Serial.print('\t');
+      Serial.print(data2.dx);
+      Serial.print('\t');
+      Serial.print(data1.dy);
+      Serial.print('\t');
+      Serial.println(data2.dy);
+    }
+    */
+
 #ifdef ADVANCE_MODE
     if (AdvMouse.needSendReport() || (data.isOnSurface && moved))
     {
@@ -136,9 +153,7 @@ void loop() {
     {
       Serial.println(data.SQUAL);
     }
-
   }
-
 
   // command process routine
   while (Serial.available() > 0)
@@ -160,6 +175,9 @@ void loop() {
       int newCPI = readNumber();
       sensor1.setCPI(newCPI);
       sensor2.setCPI(newCPI);
+      
+      current_cpi = sensor1.getCPI();
+      
       Serial.println(sensor1.getCPI());
       Serial.println(sensor2.getCPI());
     }
@@ -170,6 +188,28 @@ void loop() {
       Serial.println(posRatio);
     }
   }
+}
+
+// s1_dx, s1_dy => sensor 1 (=front) (dx, dy)
+// s2_dx, s2_dy => sensor 2 (=rear) (dx, dy)
+// current_cpi  => 
+void translate_virtual_sensor(int s1_dx, int s1_dy, int s2_dx, int s2_dy, float weight_x, float weight_y, float &vs_pos_x, float &vs_pos_y)
+{
+  int vx = s2_dx - s1_dx;
+  int vy = s2_dy - s1_dy;
+
+  float d = sensor_dist_inch * (float)current_cpi; // inter-sensor distance in counts
+  
+  float theta = (float)vx / d; // value is in radian.
+
+  float cos_t = cos(theta);
+  float sin_t = sin(theta);
+  
+  float sa_x = d * weight_x;
+  float sa_y = d * weight_y;
+
+  vs_pos_x = (float)s2_dx + cos_t*sa_x - sin_t*sa_y - sa_x;
+  vs_pos_y = (float)s2_dy + sin_t*sa_x + cos_t*sa_y - sa_y;  
 }
 
 void buttons_init()
@@ -191,20 +231,25 @@ void check_buttons_state()
 
   lastButtonCheck = micros();
 
-  // Fast Debounce (works with 0 latency most of the time)
+  // Fast Debounce (works with mimimal latency most of the time)
   for (int i = 0; i < NUMBTN ; i++)
   {
     int state = digitalRead(btn_pins[i]);
     btn_buffers[i] = btn_buffers[i] << 1 | state;
 
-    if (!btn_state[i] && btn_buffers[i] == 0xFE) // button pressed for the first time
+    // btn_buffer detects 0 when the switch shorts, 1 when opens.
+    if (btn_state[i] == false && 
+        (btn_buffers[i] == 0xFE || btn_buffers[i] == 0x00) )
+        // 0xFE = 0b1111:1110 button pressed for the first time (for fast press detection w. minimum debouncing time)
+        // 0x00 = 0b0000:0000 force press when consequent on state (for the DEBOUNCE time) is detected
     {
       MOUSE_PRESS(btn_keys[i]);
       btn_state[i] = true;
     }
-    else if ( (btn_state[i] && btn_buffers[i] == 0x01) // button released after stabilized press
-              // force release when consequent off state (for the DEBOUNCE time) is detected
-              || (btn_state[i] && btn_buffers[i] == 0xFF) )
+    else if ( btn_state[i] == true && 
+              (btn_buffers[i] == 0x07 || btn_buffers[i] == 0xFF) )
+              // 0x07 = 0b0000:0111 button released consequently 3 times after stabilized press (not as fast as press to prevent accidental releasing during drag)
+              // 0xFF = 0b1111:1111 force release when consequent off state (for the DEBOUNCE time) is detected
     {
       MOUSE_RELEASE(btn_keys[i]);
       btn_state[i] = false;
