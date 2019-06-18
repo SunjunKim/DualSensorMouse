@@ -54,7 +54,7 @@ int current_cpi = DEFAULT_CPI;
 
 void setup() {
   Serial.begin(9600);
-  while(!Serial);
+  //while(!Serial);
   //sensor.begin(10, 1600); // to set CPI (Count per Inch), pass it as the second parameter
 
   sensor1.begin(SS1); sensor2.begin(SS2);
@@ -117,11 +117,13 @@ void loop() {
     //data.dx = data1.dx + data2.dx;
     //data.dy = data1.dy + data2.dy;
 
-    bool moved = data.dx != 0 || data.dy != 0;
+    bool moved = data1.dx != 0 || data1.dy != 0 || data2.dx != 0 || data2.dy != 0;
 
     /*
-    if(data.isOnSurface)
+    if(data.isOnSurface && moved)
     {
+      Serial.print(micros());
+      Serial.print('\t');
       Serial.print(data1.dx);
       Serial.print('\t');
       Serial.print(data2.dx);
@@ -129,8 +131,8 @@ void loop() {
       Serial.print(data1.dy);
       Serial.print('\t');
       Serial.println(data2.dy);
-    }
-    */
+    }*/
+    
 
 #ifdef ADVANCE_MODE
     if (AdvMouse.needSendReport() || (data.isOnSurface && moved))
