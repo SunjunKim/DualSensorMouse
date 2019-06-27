@@ -84,7 +84,7 @@ void loop() {
 
     bool moved = (dx != 0) || (dy != 0);
 
-    
+    /*
     if(data.isOnSurface && moved)
     {
       Serial.print(micros());
@@ -93,7 +93,7 @@ void loop() {
       Serial.print('\t');
       Serial.println(data.dy);
     }
-    
+    */
 
 #ifdef ADVANCE_MODE
     if (AdvMouse.needSendReport() || (data.isOnSurface && moved))
