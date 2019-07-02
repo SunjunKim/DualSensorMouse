@@ -11,7 +11,7 @@ This is a short manual on how to upload 'PMW3360_dualsensor.ino' to your DualSen
 1. Open PMW3360_dualsensor.ino with Adruino IDE.
 2. Go to "Tools > Manage Libraries", search "PMW3360 Module" and install the library.
 3. Go to [here](https://github.com/SunjunKim/PMW3360_Arduino) and download "/library/AdvMouse".
-4. Copy the AdvMouse folder into "/<your arduino directiry>/libraries".
+4. Copy the AdvMouse folder into "/... your arduino directiry .../libraries".
 5. Try verifying(✔) the code. It should be compiled without any problem.
 
 
